@@ -16,7 +16,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, nav
        <div className="p-2 rounded-md bg-bib-dark-3">
           <Icon name={IconName.Grid} className="w-6 h-6 text-bib-light-hover" />
         </div>
-      {navItems.slice(0, 6).map((item) => (
+      {navItems.map((item) => (
         <button
           key={item.page}
           onClick={() => setActivePage(item.page)}

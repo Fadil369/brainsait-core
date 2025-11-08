@@ -18,8 +18,8 @@ View your app in AI Studio: https://ai.studio/apps/drive/1gQfzphWttQr5G8AHO7YIpY
 2. Copy `.env.example` to `.env.local` and set `GEMINI_API_KEY`, `VITE_API_BASE_URL`, and `VITE_WS_BASE_URL`
 3. Run a quick type-check to make sure the Copilot integration compiles:
    `npm run typecheck`
-4. In one terminal start the Gemini proxy server:
-   `npm run server`
+4. In one terminal start the Gemini proxy server (with hot reload):
+   `npm run server:dev`
 5. In another terminal start the app:
    `npm run dev`
 
@@ -29,6 +29,13 @@ View your app in AI Studio: https://ai.studio/apps/drive/1gQfzphWttQr5G8AHO7YIpY
 - `npm run typecheck` must pass (guards the proxy, live integration, and bilingual templates).
 - Run the backend proxy with your production env: `NODE_ENV=production npm run server`.
 - Confirm your deployment environment injects `GEMINI_API_KEY` securely (never commit real keys).
+
+### Docker Compose deployment
+
+1. Build and start both services (frontend + API proxy):
+   `npm run compose:up`
+2. The API is exposed on `http://localhost:4000`, and the static web build is served from `http://localhost:4173`.
+3. Set `GEMINI_API_KEY` and optional `CORS_ORIGIN` before running compose to use your real credentials.
 
 ### Testing
 

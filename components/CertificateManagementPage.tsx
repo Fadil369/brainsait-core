@@ -2,76 +2,117 @@
 // SECURITY: User interface for SSL/TLS certificate management
 // HIPAA: Audit logging for all certificate operations
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { certificateService, type Certificate } from '../services/certificateService';
 
-interface Certificate {
-  id: string;
-  name: string;
-  type: 'server' | 'client' | 'healthcare';
-  status: 'valid' | 'expiring' | 'expired';
-  issuedDate: string;
-  expiryDate: string;
-  commonName: string;
-  organization: string;
-}
+type ToastState = { type: 'success' | 'error'; message: string } | null;
 
 export const CertificateManagementPage = () => {
-  const [certificates, setCertificates] = useState<Certificate[]>([
-    {
-      id: '1',
-      name: 'api.brainsait.com',
-      type: 'server',
-      status: 'valid',
-      issuedDate: '2025-01-01',
-      expiryDate: '2026-01-11',
-      commonName: 'api.brainsait.com',
-      organization: 'BrainSAIT Ltd'
-    },
-    {
-      id: '2',
-      name: 'nphies-gateway.brainsait.sa',
-      type: 'healthcare',
-      status: 'valid',
-      issuedDate: '2025-01-01',
-      expiryDate: '2026-01-11',
-      commonName: 'nphies-gateway.brainsait.sa',
-      organization: 'BrainSAIT Ltd'
-    }
-  ]);
-
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [certType, setCertType] = useState<'server' | 'client' | 'healthcare'>('server');
   const [commonName, setCommonName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+
+  const loadCertificates = async () => {
+    setIsLoading(true);
+    try {
+      const data = await certificateService.listCertificates();
+      setCertificates(data);
+    } catch (error) {
+      console.error('Unable to load certificates', error);
+      setToast({ type: 'error', message: 'Failed to fetch certificates.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCertificates();
+  }, []);
+
+  const withToast = (nextToast: ToastState) => {
+    setToast(nextToast);
+    if (nextToast) {
+      setTimeout(() => setToast(null), 5000);
+    }
+  };
 
   const handleCreateCertificate = async () => {
     setIsCreating(true);
     
     try {
-      // SECURITY: Call backend API to generate certificate
-      const response = await fetch('/api/certificates/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: certType,
-          commonName: commonName,
-          organization: 'BrainSAIT Ltd',
-          country: 'SA',
-          state: 'Riyadh',
-          locality: 'Riyadh'
-        })
+      const newCert = await certificateService.createCertificate({
+        type: certType,
+        commonName,
+        organization: 'BrainSAIT Ltd',
+        country: 'SA',
+        state: 'Riyadh',
+        locality: 'Riyadh'
       });
-
-      if (response.ok) {
-        const newCert = await response.json();
-        setCertificates([...certificates, newCert]);
-        setShowCreateModal(false);
-        setCommonName('');
-      }
+      setCertificates(prev => [...prev, newCert]);
+      setShowCreateModal(false);
+      setCommonName('');
+      withToast({ type: 'success', message: 'Certificate issued successfully.' });
     } catch (error) {
       console.error('Failed to create certificate:', error);
+      withToast({ type: 'error', message: 'Certificate issuance failed.' });
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleDownload = async (certificate: Certificate) => {
+    setActionInFlight(certificate.id);
+    try {
+      const blob = await certificateService.downloadCertificate(certificate.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${certificate.commonName}.pem`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      withToast({ type: 'success', message: 'Certificate downloaded.' });
+    } catch (error) {
+      console.error('Failed to download certificate:', error);
+      withToast({ type: 'error', message: 'Download failed.' });
+    } finally {
+      setActionInFlight(null);
+    }
+  };
+
+  const handleRenew = async (certificate: Certificate) => {
+    setActionInFlight(certificate.id);
+    try {
+      const updated = await certificateService.renewCertificate(certificate.id, 375);
+      setCertificates(prev => prev.map(cert => (cert.id === updated.id ? updated : cert)));
+      withToast({ type: 'success', message: 'Certificate renewed.' });
+    } catch (error) {
+      console.error('Failed to renew certificate:', error);
+      withToast({ type: 'error', message: 'Renewal failed.' });
+    } finally {
+      setActionInFlight(null);
+    }
+  };
+
+  const handleVerify = async (certificate: Certificate) => {
+    setActionInFlight(certificate.id);
+    try {
+      const verification = await certificateService.verifyCertificate(certificate.id);
+      withToast({
+        type: verification.valid ? 'success' : 'error',
+        message: verification.message,
+      });
+    } catch (error) {
+      console.error('Failed to verify certificate', error);
+      withToast({ type: 'error', message: 'Verification failed.' });
+    } finally {
+      setActionInFlight(null);
     }
   };
 
@@ -116,8 +157,26 @@ export const CertificateManagementPage = () => {
         </div>
       </div>
 
-      {/* BRAINSAIT: Certificate Cards Grid */}
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {toast && (
+        <div
+          className={`max-w-7xl mx-auto mb-6 rounded-xl p-4 ${
+            toast.type === 'success'
+              ? 'bg-green-50 text-green-800 border border-green-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="max-w-7xl mx-auto bg-white/60 border border-blue-200 rounded-2xl p-8 text-center text-blue-700 font-semibold shadow">
+          Loading certificates...
+        </div>
+      ) : (
+        <>
+        {/* BRAINSAIT: Certificate Cards Grid */}
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {certificates.map((cert) => (
           <div
             key={cert.id}
@@ -132,7 +191,7 @@ export const CertificateManagementPage = () => {
             </div>
 
             {/* Certificate Info */}
-            <h3 className="text-lg font-bold text-gray-900 mb-2">{cert.name}</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">{cert.commonName}</h3>
             <p className="text-sm text-gray-600 mb-4">{cert.organization}</p>
 
             {/* Details */}
@@ -152,17 +211,34 @@ export const CertificateManagementPage = () => {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2">
-              <button className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => handleDownload(cert)}
+                disabled={actionInFlight === cert.id}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm disabled:opacity-50"
+              >
                 Download
               </button>
-              <button className="flex-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm">
+              <button
+                onClick={() => handleRenew(cert)}
+                disabled={actionInFlight === cert.id}
+                className="flex-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm disabled:opacity-50"
+              >
                 Renew
+              </button>
+              <button
+                onClick={() => handleVerify(cert)}
+                disabled={actionInFlight === cert.id}
+                className="flex-1 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm disabled:opacity-50"
+              >
+                Verify
               </button>
             </div>
           </div>
         ))}
-      </div>
+        </div>
+        </>
+      )}
 
       {/* SECURITY: Create Certificate Modal */}
       {showCreateModal && (

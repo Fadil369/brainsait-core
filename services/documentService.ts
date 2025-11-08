@@ -2,6 +2,9 @@
 // BILINGUAL: Support for Arabic/English document generation
 // MEDICAL: Healthcare-compliant document templates
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const withBase = (path: string) => (API_BASE_URL ? `${API_BASE_URL}${path}` : path);
+
 export interface DocumentRequest {
   templateId: string;
   language: 'en' | 'ar';
@@ -36,7 +39,7 @@ export interface GeneratedDocument {
 }
 
 class DocumentService {
-  private baseUrl = '/api/documents';
+  private baseUrl = withBase('/api/documents');
 
   /**
    * BRAINSAIT: Generate a document from template

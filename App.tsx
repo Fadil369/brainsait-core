@@ -11,6 +11,8 @@ import { TemplatesPage } from './components/TemplatesPage';
 import { HRMPage } from './components/HRMPage';
 import { GeminiAIAssistant } from './components/GeminiAIAssistant';
 import { Icon } from './components/Icon';
+import { CertificateManagementPage } from './components/CertificateManagementPage';
+import { DocumentGenerationPage } from './components/DocumentGenerationPage';
 
 
 const App: React.FC = () => {
@@ -31,6 +33,10 @@ const App: React.FC = () => {
         return <TemplatesPage />;
       case Page.HRM:
         return <HRMPage />;
+      case Page.Certificates:
+        return <CertificateManagementPage />;
+      case Page.DocumentGenerator:
+        return <DocumentGenerationPage />;
       default:
         return <HomePage setActivePage={setActivePage} />;
     }

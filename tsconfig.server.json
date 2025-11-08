@@ -10,7 +10,8 @@
       "node"
     ],
     "noEmit": false,
-    "outDir": "./dist-server"
+    "outDir": "./dist-server",
+    "allowImportingTsExtensions": false
   },
   "include": [
     "server/**/*.ts",

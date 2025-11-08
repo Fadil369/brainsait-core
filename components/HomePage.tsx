@@ -124,6 +124,8 @@ const bookmarks = [
     { name: 'Contacts', icon: IconName.Users2, page: Page.Home },
     { name: 'HRM', icon: IconName.Hrm, page: Page.HRM },
     { name: 'AI', icon: IconName.Ai, page: Page.Home },
+    { name: 'Docs', icon: IconName.FileText, page: Page.DocumentGenerator },
+    { name: 'Certificates', icon: IconName.ShieldCheck, page: Page.Certificates },
 ];
 
 const BookmarkCard: React.FC<{setActivePage: (page: Page) => void}> = ({setActivePage}) => {

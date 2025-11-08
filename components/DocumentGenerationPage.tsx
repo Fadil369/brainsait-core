@@ -2,19 +2,10 @@
 // BILINGUAL: Full Arabic/English document generation support
 // MEDICAL: Healthcare-compliant document templates
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { documentService, type DocumentTemplate } from '../services/documentService';
 
-interface DocumentTemplate {
-  id: string;
-  name: string;
-  nameAr: string;
-  category: string;
-  description: string;
-  icon: string;
-  tags: string[];
-}
-
-const documentTemplates: DocumentTemplate[] = [
+const fallbackTemplates: DocumentTemplate[] = [
   {
     id: 'business-plan',
     name: 'Business Plan',
@@ -22,7 +13,9 @@ const documentTemplates: DocumentTemplate[] = [
     category: 'Strategy',
     description: '3-year strategic business plan with financial projections',
     icon: '📊',
-    tags: ['strategy', 'finance', 'planning']
+    tags: ['strategy', 'finance', 'planning'],
+    requiredFields: ['department', 'title', 'author'],
+    supportedLanguages: ['en', 'ar']
   },
   {
     id: 'proposal',
@@ -31,7 +24,9 @@ const documentTemplates: DocumentTemplate[] = [
     category: 'Sales',
     description: 'Professional client proposal with pricing and timeline',
     icon: '📝',
-    tags: ['sales', 'client', 'proposal']
+    tags: ['sales', 'client', 'proposal'],
+    requiredFields: ['department', 'title'],
+    supportedLanguages: ['en', 'ar']
   },
   {
     id: 'policy',
@@ -40,7 +35,9 @@ const documentTemplates: DocumentTemplate[] = [
     category: 'Administration',
     description: 'HIPAA-compliant company policy document',
     icon: '📋',
-    tags: ['policy', 'compliance', 'HIPAA']
+    tags: ['policy', 'compliance', 'HIPAA'],
+    requiredFields: ['department', 'title'],
+    supportedLanguages: ['en', 'ar']
   },
   {
     id: 'employee-handbook',
@@ -49,7 +46,9 @@ const documentTemplates: DocumentTemplate[] = [
     category: 'HR',
     description: 'Comprehensive bilingual employee handbook',
     icon: '👥',
-    tags: ['HR', 'employees', 'handbook']
+    tags: ['HR', 'employees', 'handbook'],
+    requiredFields: ['department', 'title'],
+    supportedLanguages: ['en', 'ar']
   },
   {
     id: 'marketing-plan',
@@ -58,7 +57,9 @@ const documentTemplates: DocumentTemplate[] = [
     category: 'Marketing',
     description: 'Quarterly marketing campaign with budget and metrics',
     icon: '📢',
-    tags: ['marketing', 'campaign', 'planning']
+    tags: ['marketing', 'campaign', 'planning'],
+    requiredFields: ['department', 'title'],
+    supportedLanguages: ['en', 'ar']
   },
   {
     id: 'healthcare-form',
@@ -67,11 +68,14 @@ const documentTemplates: DocumentTemplate[] = [
     category: 'Healthcare',
     description: 'NPHIES-compliant healthcare documentation',
     icon: '🏥',
-    tags: ['healthcare', 'NPHIES', 'medical']
+    tags: ['healthcare', 'NPHIES', 'medical'],
+    requiredFields: ['department', 'title'],
+    supportedLanguages: ['en', 'ar']
   }
 ];
 
 export const DocumentGenerationPage = () => {
+  const [templates, setTemplates] = useState<DocumentTemplate[]>(fallbackTemplates);
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null);
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
   const [formData, setFormData] = useState({
@@ -83,10 +87,43 @@ export const DocumentGenerationPage = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const categories = ['all', 'Strategy', 'Sales', 'Administration', 'HR', 'Marketing', 'Healthcare'];
 
-  const filteredTemplates = documentTemplates.filter(template => {
+  useEffect(() => {
+    const loadTemplates = async () => {
+      setTemplatesLoading(true);
+      try {
+        const remoteTemplates = await documentService.listTemplates();
+        if (remoteTemplates.length) {
+          setTemplates(remoteTemplates);
+          setTemplatesError(null);
+          return;
+        }
+      } catch (error) {
+        console.warn('Falling back to local templates', error);
+        setTemplatesError('Using local templates because the API is unreachable.');
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+
+    loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTemplate) {
+      const updated = templates.find(t => t.id === selectedTemplate.id);
+      if (updated) {
+        setSelectedTemplate(updated);
+      }
+    }
+  }, [templates]);
+
+  const filteredTemplates = templates.filter(template => {
     const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          template.nameAr.includes(searchQuery) ||
                          template.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -100,33 +137,30 @@ export const DocumentGenerationPage = () => {
     setIsGenerating(true);
 
     try {
-      // BRAINSAIT: Call Python backend to generate PDF
-      const response = await fetch('/api/documents/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId: selectedTemplate.id,
-          language: language,
-          department: formData.department,
-          title: formData.title,
-          author: formData.author,
-          customContent: formData.customContent
-        })
+      const blob = await documentService.generateDocument({
+        templateId: selectedTemplate.id,
+        language,
+        department: formData.department,
+        title: formData.title,
+        author: formData.author,
+        customContent: formData.customContent,
+        metadata: {
+          requestedAt: new Date().toISOString(),
+        },
       });
 
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${selectedTemplate.id}-${language}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedTemplate.id}-${language}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setStatusMessage({ type: 'success', message: 'Document generated successfully.' });
     } catch (error) {
       console.error('Failed to generate document:', error);
+      setStatusMessage({ type: 'error', message: 'Failed to generate document. Please try again.' });
     } finally {
       setIsGenerating(false);
     }
@@ -204,6 +238,16 @@ export const DocumentGenerationPage = () => {
 
       {/* Template Grid */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {templatesLoading && (
+          <div className="col-span-full text-center text-blue-700 bg-blue-50 border border-blue-200 rounded-xl py-4">
+            Loading templates from BrainSAIT Core...
+          </div>
+        )}
+        {templatesError && (
+          <div className="col-span-full text-center text-amber-700 bg-amber-50 border border-amber-200 rounded-xl py-3">
+            {templatesError}
+          </div>
+        )}
         {filteredTemplates.map((template) => (
           <div
             key={template.id}
@@ -243,8 +287,20 @@ export const DocumentGenerationPage = () => {
         <div className="max-w-4xl mx-auto bg-white rounded-2xl p-8 shadow-2xl border-2 border-blue-200">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
             <span className="text-4xl">{selectedTemplate.icon}</span>
-            Configure {selectedTemplate.name}
+            Configure {language === 'en' ? selectedTemplate.name : selectedTemplate.nameAr}
           </h2>
+
+          {statusMessage && (
+            <div
+              className={`mb-6 rounded-xl p-4 text-sm font-semibold ${
+                statusMessage.type === 'success'
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-red-50 text-red-700 border border-red-200'
+              }`}
+            >
+              {statusMessage.message}
+            </div>
+          )}
 
           <div className="space-y-6">
             {/* Department */}

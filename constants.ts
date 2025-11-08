@@ -36,18 +36,12 @@ export enum Page {
   Top50 = 'Top 50 Templates',
   DocumentTypes = 'Document Types',
   BusinessIndustries = 'Business Industries',
+  DocumentGenerator = 'Document Generator',
+  Certificates = 'Certificates',
   // FIX: Add missing Page enum members for TasksPage
   Projects = 'Projects',
   Goals = 'Goals',
   Chart = 'Chart',
-  // BRAINSAIT: Enhanced pages
-  Dashboard = 'Dashboard',
-  Certificates = 'Certificates',
-  Documents = 'Documents',
-  AIAssistant = 'AIAssistant',
-  NPHIES = 'NPHIES',
-  Analytics = 'Analytics',
-  Compliance = 'Compliance',
 }
 
 export enum IconName {
@@ -138,6 +132,8 @@ export const sidebarNavItems: NavItem[] = [
   { icon: IconName.Templates, label: 'Templates', page: Page.Templates },
   // FIX: Changed IconName.HRM to IconName.Hrm to match enum definition
   { icon: IconName.Hrm, label: 'HRM', page: Page.HRM },
+  { icon: IconName.FileText, label: 'Docs', page: Page.DocumentGenerator },
+  { icon: IconName.ShieldCheck, label: 'Certificates', page: Page.Certificates },
   { icon: IconName.Flag, label: 'Flagged', page: Page.Flagged },
   { icon: IconName.Send, label: 'Sent', page: Page.Sent },
   { icon: IconName.Draft, label: 'Drafts', page: Page.Drafts },

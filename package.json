@@ -8,8 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "server": "tsx --tsconfig tsconfig.server.json server/index.ts",
-    "test:e2e": "playwright test"
+    "server:dev": "tsx --tsconfig tsconfig.server.json server/index.ts",
+    "server:build": "tsc -p tsconfig.server.json",
+    "server:start": "node dist-server/server/index.js",
+    "server": "npm run server:build && npm run server:start",
+    "test:e2e": "playwright test",
+    "compose:up": "docker compose up --build"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

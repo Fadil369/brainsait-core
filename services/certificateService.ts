@@ -13,6 +13,9 @@ export interface CertificateRequest {
   validity?: number; // days
 }
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const withBase = (path: string) => (API_BASE_URL ? `${API_BASE_URL}${path}` : path);
+
 export interface Certificate {
   id: string;
   type: 'server' | 'client' | 'healthcare';
@@ -27,7 +30,7 @@ export interface Certificate {
 }
 
 class CertificateService {
-  private baseUrl = '/api/certificates';
+  private baseUrl = withBase('/api/certificates');
 
   /**
    * SECURITY: Create a new certificate
