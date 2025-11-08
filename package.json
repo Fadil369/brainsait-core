@@ -1,48 +1,37 @@
 {
-  "name": "brainsait-core",
-  "description": "BrainSAIT Healthcare AI Platform - Enterprise healthcare solution for Saudi Arabia & Sudan",
-  "version": "1.0.0",
+  "name": "business-in-a-box",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
-  "author": "BrainSAIT Team <support@brainsait.com>",
-  "license": "PROPRIETARY",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Fadil369/brainsait-core.git"
-  },
-  "keywords": [
-    "healthcare",
-    "HIPAA",
-    "NPHIES",
-    "FHIR",
-    "Saudi Arabia",
-    "Sudan",
-    "medical",
-    "EMR",
-    "bilingual"
-  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit",
-    "generate-docs": "python3 generate_all.py"
+    "typecheck": "tsc --noEmit",
+    "server": "tsx --tsconfig tsconfig.server.json server/index.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/morgan": "^1.9.10",
     "@types/node": "^22.14.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^5.1.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tsx": "^4.20.6",
     "typescript": "~5.8.2",
-    "vite": "^6.4.1"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "vite": "^6.2.0"
   }
 }

@@ -1,6 +1,4 @@
 
-import { GoogleGenAI } from "@google/genai";
-
 // Base64 encoding/decoding functions for audio data.
 export function encode(bytes: Uint8Array): string {
   let binary = '';
@@ -41,21 +39,40 @@ export async function decodeAudioData(
   return buffer;
 }
 
-// Generates text content using the Gemini API.
-export async function generateText(prompt: string, modelName: 'gemini-2.5-flash' | 'gemini-2.5-pro'): Promise<string> {
-    if (!process.env.API_KEY) {
-        throw new Error("API key not found.");
-    }
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    try {
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents: prompt,
-        });
-        return response.text;
-    } catch (error) {
-        console.error("Error generating text:", error);
-        throw new Error("Failed to get a response from the AI model.");
-    }
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+const apiPath = (path: string) => `${API_BASE_URL}${path}`;
+
+interface GeminiProxyResponse {
+  text: string;
+  modelVersion?: string;
 }
+
+export async function generateText(prompt: string, modelName: 'gemini-2.5-flash' | 'gemini-2.5-pro'): Promise<string> {
+  const response = await fetch(apiPath('/api/gemini/text'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompt,
+      model: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Gemini proxy request failed.');
+  }
+
+  const data = (await response.json()) as GeminiProxyResponse;
+  if (!data.text) {
+    throw new Error('Gemini proxy did not return text.');
+  }
+  return data.text;
+}
+
+export const geminiService = {
+  async chat(prompt: string, modelName: 'gemini-2.5-flash' | 'gemini-2.5-pro' = 'gemini-2.5-flash') {
+    return generateText(prompt, modelName);
+  },
+};

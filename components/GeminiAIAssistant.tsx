@@ -1,32 +1,158 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleGenAI, LiveSession, LiveServerMessage, Modality, Blob as GenAIBlob } from "@google/genai";
 import { Icon } from './Icon';
 import { IconName } from '../constants';
 import { encode, decode, decodeAudioData } from '../services/geminiService';
 
 declare global {
     interface Window {
-        webkitAudioContext: typeof AudioContext
+        webkitAudioContext: typeof AudioContext;
     }
 }
+
 interface GeminiAIAssistantProps {
     onClose: () => void;
 }
+
+type EncodedAudioChunk = {
+    data: string;
+    mimeType: string;
+};
+
+interface LiveServerPayload {
+    serverContent?: {
+        modelTurn?: ModelTurn;
+        inputTranscription?: Transcription;
+        outputTranscription?: Transcription;
+        turnComplete?: boolean;
+    };
+}
+
+type ModelTurn = {
+    parts?: Array<{
+        text?: string;
+        inlineData?: {
+            data?: string;
+            mimeType?: string;
+        };
+    }>;
+};
+
+type Transcription = {
+    text?: string;
+    finished?: boolean;
+};
+
+type SocketEnvelope =
+    | { type: 'status'; status: string }
+    | { type: 'error'; message?: string }
+    | { type: 'gemini'; payload: LiveServerPayload };
+
+const deriveWsUrl = (): string => {
+    const explicitWs = import.meta.env.VITE_WS_BASE_URL as string | undefined;
+    if (explicitWs) {
+        return `${explicitWs.replace(/\/$/, '')}/ws/gemini-live`;
+    }
+    const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+    if (apiBase) {
+        const wsBase = apiBase.replace(/\/$/, '').replace(/^http/i, apiBase.startsWith('https') ? 'wss' : 'ws');
+        return `${wsBase}/ws/gemini-live`;
+    }
+    if (typeof window !== 'undefined') {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${protocol}//${window.location.host}/ws/gemini-live`;
+    }
+    return 'ws://localhost:4000/ws/gemini-live';
+};
 
 export const GeminiAIAssistant: React.FC<GeminiAIAssistantProps> = ({ onClose }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [isConnecting, setIsConnecting] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [transcription, setTranscription] = useState<{user: string, model: string}[]>([]);
-    const [currentInterim, setCurrentInterim] = useState('');
+    const [transcription, setTranscription] = useState<{ user: string; model: string }[]>([]);
+    const [currentInterim, setCurrentInterimState] = useState('');
 
-    const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
+    const currentInterimRef = useRef('');
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
     const outputAudioContextRef = useRef<AudioContext | null>(null);
-    
+    const nextAudioStartRef = useRef(0);
+    const wsRef = useRef<WebSocket | null>(null);
+    const outboundQueueRef = useRef<EncodedAudioChunk[]>([]);
+
+    const updateCurrentInterim = useCallback((value: string) => {
+        currentInterimRef.current = value;
+        setCurrentInterimState(value);
+    }, []);
+
+    const resetCurrentInterim = useCallback(() => {
+        updateCurrentInterim('');
+    }, [updateCurrentInterim]);
+
+    const finalizeUserTurn = useCallback(
+        (overrideText?: string) => {
+            const text = (overrideText ?? currentInterimRef.current).trim();
+            if (!text) {
+                return;
+            }
+            setTranscription(prev => [...prev, { user: text, model: '' }]);
+            resetCurrentInterim();
+        },
+        [resetCurrentInterim]
+    );
+
+    const appendModelResponse = useCallback((modelText: string) => {
+        const text = modelText.trim();
+        if (!text) return;
+        setTranscription(prev => {
+            if (prev.length === 0) {
+                return [{ user: 'Copilot Arabic', model: text }];
+            }
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            const lastEntry = updated[lastIndex];
+            updated[lastIndex] = {
+                ...lastEntry,
+                model: lastEntry.model ? `${lastEntry.model}\n${text}` : text,
+            };
+            return updated;
+        });
+    }, []);
+
+    const flushAudioQueue = useCallback(() => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        while (outboundQueueRef.current.length > 0) {
+            const chunk = outboundQueueRef.current.shift();
+            if (chunk) {
+                ws.send(JSON.stringify({ type: 'audio', data: chunk.data, mimeType: chunk.mimeType }));
+            }
+        }
+    }, []);
+
+    const queueAudioChunk = useCallback((chunk: EncodedAudioChunk) => {
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'audio', data: chunk.data, mimeType: chunk.mimeType }));
+        } else {
+            outboundQueueRef.current.push(chunk);
+        }
+    }, []);
+
+    const closeWebSocket = useCallback(() => {
+        const ws = wsRef.current;
+        if (ws) {
+            try {
+                ws.send(JSON.stringify({ type: 'control', action: 'stop' }));
+            } catch {
+                // ignore
+            }
+            ws.close();
+        }
+        wsRef.current = null;
+        outboundQueueRef.current = [];
+    }, []);
+
     const cleanup = useCallback(() => {
         if (mediaStreamRef.current) {
             mediaStreamRef.current.getTracks().forEach(track => track.stop());
@@ -41,141 +167,143 @@ export const GeminiAIAssistant: React.FC<GeminiAIAssistantProps> = ({ onClose })
             audioContextRef.current = null;
         }
         if (outputAudioContextRef.current && outputAudioContextRef.current.state !== 'closed') {
-             outputAudioContextRef.current.close();
-             outputAudioContextRef.current = null;
+            outputAudioContextRef.current.close();
+            outputAudioContextRef.current = null;
         }
-        
-        if (sessionPromiseRef.current) {
-            sessionPromiseRef.current.then(session => session.close());
-            sessionPromiseRef.current = null;
-        }
+        closeWebSocket();
         setIsRecording(false);
-        
-    }, []);
+        resetCurrentInterim();
+        setTranscription([]);
+    }, [closeWebSocket, resetCurrentInterim]);
+
+    const handleGeminiPayload = useCallback(
+        async (payload: LiveServerPayload) => {
+            const serverContent = payload.serverContent;
+            if (!serverContent) return;
+
+            const inputTranscription = serverContent.inputTranscription;
+            if (inputTranscription?.text) {
+                updateCurrentInterim(inputTranscription.text);
+                if (inputTranscription.finished) {
+                    finalizeUserTurn(inputTranscription.text);
+                }
+            }
+
+            if (serverContent.turnComplete) {
+                finalizeUserTurn();
+            }
+
+            const serverText =
+                serverContent.outputTranscription?.text ||
+                extractTextFromModelTurn(serverContent.modelTurn);
+            if (serverText) {
+                appendModelResponse(serverText);
+            }
+
+            const inlineAudio = findInlineAudio(serverContent.modelTurn);
+            if (inlineAudio && outputAudioContextRef.current) {
+                nextAudioStartRef.current = Math.max(nextAudioStartRef.current, outputAudioContextRef.current.currentTime);
+                const audioBuffer = await decodeAudioData(
+                    decode(inlineAudio.data),
+                    outputAudioContextRef.current,
+                    24000,
+                    1
+                );
+                const source = outputAudioContextRef.current.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(outputAudioContextRef.current.destination);
+                source.start(nextAudioStartRef.current);
+                nextAudioStartRef.current += audioBuffer.duration;
+            }
+        },
+        [appendModelResponse, finalizeUserTurn, updateCurrentInterim]
+    );
+
+    const connectWebSocket = useCallback(() => {
+        const wsUrl = deriveWsUrl();
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+            setIsConnecting(false);
+            setIsRecording(true);
+            flushAudioQueue();
+        };
+
+        ws.onmessage = event => {
+            try {
+                const payload = JSON.parse(event.data) as SocketEnvelope;
+                if (payload.type === 'error') {
+                    setError(payload.message ?? 'Gemini connection error.');
+                } else if (payload.type === 'status' && payload.status === 'closed') {
+                    setIsRecording(false);
+                } else if (payload.type === 'gemini') {
+                    handleGeminiPayload(payload.payload);
+                }
+            } catch (err) {
+                console.error('Failed to parse Gemini socket message', err);
+            }
+        };
+
+        ws.onerror = () => {
+            setError('Gemini connection error.');
+        };
+
+        ws.onclose = () => {
+            setIsRecording(false);
+            wsRef.current = null;
+        };
+    }, [flushAudioQueue, handleGeminiPayload]);
 
     const startConversation = useCallback(async () => {
         setError(null);
         setIsConnecting(true);
 
-        if (!process.env.API_KEY) {
-            setError("API key not found. Please set the API_KEY environment variable.");
-            setIsConnecting(false);
-            return;
-        }
-
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaStreamRef.current = stream;
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            
             const inputAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
             audioContextRef.current = inputAudioContext;
-            
+
             const outputAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
             outputAudioContextRef.current = outputAudioContext;
-            let nextStartTime = 0;
+            nextAudioStartRef.current = 0;
 
+            connectWebSocket();
 
-            sessionPromiseRef.current = ai.live.connect({
-                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-                callbacks: {
-                    onopen: () => {
-                        setIsConnecting(false);
-                        setIsRecording(true);
-                        
-                        const source = inputAudioContext.createMediaStreamSource(stream);
-                        const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
-                        scriptProcessorRef.current = scriptProcessor;
+            const source = inputAudioContext.createMediaStreamSource(stream);
+            const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+            scriptProcessorRef.current = scriptProcessor;
 
-                        scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
-                            const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-                            const pcmBlob = createBlob(inputData);
-                            if (sessionPromiseRef.current) {
-                                sessionPromiseRef.current.then((session) => {
-                                    session.sendRealtimeInput({ media: pcmBlob });
-                                });
-                            }
-                        };
-                        source.connect(scriptProcessor);
-                        scriptProcessor.connect(inputAudioContext.destination);
-                    },
-                    onmessage: async (message: LiveServerMessage) => {
-                        if (message.serverContent?.inputTranscription) {
-                            setCurrentInterim(message.serverContent.inputTranscription.text);
-                        }
-
-                        if (message.serverContent?.turnComplete) {
-                           setTranscription(prev => [...prev, {user: currentInterim, model: ''}]);
-                           setCurrentInterim('');
-                        }
-                        
-                        const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-                        if (base64EncodedAudioString) {
-                            nextStartTime = Math.max(nextStartTime, outputAudioContext.currentTime);
-                            const audioBuffer = await decodeAudioData(
-                                decode(base64EncodedAudioString),
-                                outputAudioContext,
-                                24000,
-                                1,
-                            );
-                            const source = outputAudioContext.createBufferSource();
-                            source.buffer = audioBuffer;
-                            source.connect(outputAudioContext.destination);
-                            source.start(nextStartTime);
-                            nextStartTime += audioBuffer.duration;
-                        }
-                    },
-                    onerror: (e: ErrorEvent) => {
-                        setError(`An error occurred: ${e.message}`);
-                        cleanup();
-                    },
-                    onclose: () => {
-                        cleanup();
-                    },
-                },
-                config: {
-                    responseModalities: [Modality.AUDIO],
-                    inputAudioTranscription: {},
-                    speechConfig: {
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
-                    },
-                    systemInstruction: "You are a friendly and helpful business assistant for the 'Business in a Box' application.",
-                },
-            });
+            scriptProcessor.onaudioprocess = event => {
+                const inputData = event.inputBuffer.getChannelData(0);
+                const chunk = createAudioChunk(inputData);
+                queueAudioChunk(chunk);
+            };
+            source.connect(scriptProcessor);
+            scriptProcessor.connect(inputAudioContext.destination);
         } catch (err) {
             if (err instanceof Error) {
                 setError(`Failed to start microphone: ${err.message}`);
             } else {
-                setError("An unknown error occurred.");
+                setError('An unknown error occurred.');
             }
             setIsConnecting(false);
+            cleanup();
         }
-    }, [cleanup, currentInterim]);
+    }, [cleanup, connectWebSocket, queueAudioChunk]);
 
     const stopConversation = useCallback(() => {
         cleanup();
     }, [cleanup]);
-
-    const createBlob = (data: Float32Array): GenAIBlob => {
-        const l = data.length;
-        const int16 = new Int16Array(l);
-        for (let i = 0; i < l; i++) {
-            int16[i] = data[i] * 32768;
-        }
-        return {
-            data: encode(new Uint8Array(int16.buffer)),
-            mimeType: 'audio/pcm;rate=16000',
-        };
-    };
 
     useEffect(() => {
         startConversation();
         return () => {
             stopConversation();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [startConversation, stopConversation]);
 
     const handleToggleRecord = () => {
         if (isRecording) {
@@ -184,10 +312,10 @@ export const GeminiAIAssistant: React.FC<GeminiAIAssistantProps> = ({ onClose })
             startConversation();
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-            <div className="bg-bib-dark-2 rounded-lg shadow-xl w-full max-w-md m-4 flex flex-col" style={{height: '600px'}}>
+            <div className="bg-bib-dark-2 rounded-lg shadow-xl w-full max-w-md m-4 flex flex-col" style={{ height: '600px' }}>
                 <header className="flex items-center justify-between p-4 border-b border-bib-dark-3">
                     <div className="flex items-center space-x-2">
                         <Icon name={IconName.Sparkles} className="w-6 h-6 text-purple-400" />
@@ -206,25 +334,65 @@ export const GeminiAIAssistant: React.FC<GeminiAIAssistantProps> = ({ onClose })
 
                     {transcription.map((t, i) => (
                         <div key={i} className="text-sm">
-                            <p><span className="font-bold text-blue-400">You:</span> {t.user}</p>
-                            {t.model && <p><span className="font-bold text-purple-400">Gemini:</span> {t.model}</p>}
+                            <p>
+                                <span className="font-bold text-blue-400">You:</span> {t.user}
+                            </p>
+                            {t.model && (
+                                <p>
+                                    <span className="font-bold text-purple-400">Gemini:</span> {t.model}
+                                </p>
+                            )}
                         </div>
                     ))}
                     {currentInterim && <p className="text-sm text-bib-light italic">You: {currentInterim}</p>}
                 </main>
 
                 <footer className="p-4 border-t border-bib-dark-3 flex flex-col items-center justify-center">
-                    <button onClick={handleToggleRecord} className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors duration-200 ${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                       {isConnecting ? 
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div> :
-                        <Icon name={isRecording ? IconName.StopCircle : IconName.Microphone} className="w-8 h-8 text-white"/>
-                        }
+                    <button
+                        onClick={handleToggleRecord}
+                        className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors duration-200 ${
+                            isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+                        }`}
+                    >
+                        {isConnecting ? (
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                        ) : (
+                            <Icon name={isRecording ? IconName.StopCircle : IconName.Microphone} className="w-8 h-8 text-white" />
+                        )}
                     </button>
-                    <p className="text-sm text-bib-light mt-2">
-                        {isConnecting ? "Connecting..." : (isRecording ? "Recording..." : "Click to start recording")}
-                    </p>
+                    <p className="text-sm text-bib-light mt-2">{isConnecting ? 'Connecting...' : isRecording ? 'Recording...' : 'Click to start recording'}</p>
                 </footer>
             </div>
         </div>
     );
+};
+
+const createAudioChunk = (data: Float32Array): EncodedAudioChunk => {
+    const l = data.length;
+    const int16 = new Int16Array(l);
+    for (let i = 0; i < l; i++) {
+        int16[i] = data[i] * 32768;
+    }
+    return {
+        data: encode(new Uint8Array(int16.buffer)),
+        mimeType: 'audio/pcm;rate=16000',
+    };
+};
+
+const extractTextFromModelTurn = (modelTurn?: ModelTurn): string => {
+    if (!modelTurn?.parts) return '';
+    return modelTurn.parts
+        .map(part => part.text?.trim())
+        .filter(Boolean)
+        .join('\n');
+};
+
+const findInlineAudio = (modelTurn?: ModelTurn): { data: string } | null => {
+    if (!modelTurn?.parts) return null;
+    for (const part of modelTurn.parts) {
+        if (part.inlineData?.data && part.inlineData.mimeType?.startsWith('audio/')) {
+            return { data: part.inlineData.data };
+        }
+    }
+    return null;
 };

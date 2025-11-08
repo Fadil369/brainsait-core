@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { IconName, Page } from '../constants';
 import { Modal } from './Modal';
 import { generateText } from '../services/geminiService';
+import { buildCopilotTemplatePrompt } from '../copilotConfig';
 
 // ... (template navigation and data constants remain the same) ...
 const templatesNav = [
@@ -55,7 +56,13 @@ const TemplateFolder: React.FC<{name: string}> = ({name}) => (
 );
 
 const TemplatePreview: React.FC<{name: string, onGenerate: (name: string) => void}> = ({name, onGenerate}) => (
-    <div className="bg-bib-dark-3 rounded-lg cursor-pointer group" onClick={() => onGenerate(name)}>
+    <div
+        className="bg-bib-dark-3 rounded-lg cursor-pointer group"
+        onClick={() => onGenerate(name)}
+        data-testid="template-card"
+        data-template-name={name}
+        aria-label={`Generate ${name}`}
+    >
         <div className="bg-bib-dark h-32 flex items-center justify-center rounded-t-lg border-b-2 border-transparent group-hover:border-blue-500 relative">
             <div className="w-24 h-24 bg-gray-600 p-2 rounded-md">
                 <div className="bg-gray-700 h-full w-full"></div>
@@ -93,7 +100,10 @@ export const TemplatesPage: React.FC = () => {
         setIsResultModalOpen(true);
         setGeneratedContent('');
         
-        const prompt = `Using the structure of a "${selectedTemplate}" document, generate content for the following concept: "${userPrompt}". The document should be comprehensive, professional, and ready to use.`;
+        const prompt = buildCopilotTemplatePrompt({
+            templateName: selectedTemplate,
+            description: userPrompt,
+        });
         try {
             const result = await generateText(prompt, 'gemini-2.5-pro');
             setGeneratedContent(result);
@@ -156,7 +166,7 @@ export const TemplatesPage: React.FC = () => {
                 <p className="text-sm text-bib-light">Provide a brief description of the <span className="font-bold text-white">{selectedTemplate}</span> you want to create.</p>
                 <div>
                     <label htmlFor="userPrompt" className="block text-sm font-medium text-bib-light">Description</label>
-                    <input type="text" id="userPrompt" value={userPrompt} onChange={e => setUserPrompt(e.target.value)} placeholder="e.g., A coffee shop in San Francisco" className="mt-1 block w-full bg-bib-dark-3 border-bib-dark-3 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-bib-blue focus:border-bib-blue sm:text-sm" autoFocus />
+                    <input type="text" id="userPrompt" value={userPrompt} onChange={e => setUserPrompt(e.target.value)} placeholder="e.g., A coffee shop in San Francisco" className="mt-1 block w-full bg-bib-dark-3 border-bib-dark-3 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-bib-blue focus:border-bib-blue sm:text-sm" autoFocus required />
                 </div>
                  <div className="flex justify-end space-x-2">
                     <button type="button" onClick={() => setGenerateModalOpen(false)} className="px-4 py-2 text-sm font-medium text-bib-light bg-bib-dark-3 rounded-md hover:bg-bib-dark-2">Cancel</button>

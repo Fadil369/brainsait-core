@@ -40,7 +40,7 @@ export const DrivePage: React.FC = () => {
     event.preventDefault();
     const droppedFiles = event.dataTransfer.files;
     if (droppedFiles.length > 0) {
-        const newFiles: FileObject[] = Array.from(droppedFiles).map(file => ({
+        const newFiles: FileObject[] = Array.from(droppedFiles).map((file: File) => ({
             id: Math.random(), // In real app, use a better ID
             name: file.name,
             type: 'file',
