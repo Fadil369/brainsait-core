@@ -40,8 +40,10 @@ Deliver world-class healthcare technology that seamlessly integrates with Saudi 
 ### 🔐 Security & Compliance
 - **HIPAA Compliant** - All PHI encrypted at rest and in transit
 - **NPHIES Integration** - Saudi healthcare standards compliance
+- **Certificate Authority** - Internal CA for healthcare services
 - **Audit Logging** - Complete audit trail for all PHI access
 - **Role-Based Access** - Granular permission controls
+- **TLS 1.2/1.3** - Strong encryption for all communications
 
 ### 📊 Document Management
 - **170+ Templates** - Professional business document templates
@@ -100,7 +102,20 @@ brainsait-core/
 │   └── ...
 ├── services/           # API services
 │   └── geminiService.ts
-├── *.pdf              # Generated documents
+├── security/           # Security & certificates
+│   ├── ca/            # Certificate Authority
+│   │   ├── manage-ca.sh    # CA management tool
+│   │   ├── openssl.cnf     # OpenSSL config
+│   │   └── README.md       # CA documentation
+│   ├── HIPAA_COMPLIANCE.md # HIPAA guide
+│   ├── NPHIES_INTEGRATION.md # NPHIES guide
+│   └── README.md       # Security overview
+├── docs/              # Business documents (18 PDFs)
+│   ├── business-plans/
+│   ├── proposals/
+│   ├── policies/
+│   ├── marketing/
+│   └── sales/
 ├── document_templates.py  # PDF generation system
 ├── generate_all.py    # Batch document generator
 ├── package.json       # Node dependencies
@@ -125,6 +140,12 @@ brainsait-core/
 - **Marketing Plans** (3) - Campaign plans
 - **Sales Materials** (2) - Catalog and sales sheets
 - **Employee Handbook** (1) - HR documentation
+
+### Security & Certificates
+- **Certificate Authority** - HIPAA-compliant CA system
+- **HIPAA Compliance** - Complete compliance documentation
+- **NPHIES Integration** - Saudi healthcare integration guide
+- **SSL/TLS Certificates** - Healthcare service certificates
 
 ---
 
@@ -187,9 +208,27 @@ colors = {
 ## 🔒 Security
 
 - **PHI Encryption** - All sensitive data encrypted
+- **Certificate Authority** - Internal CA for healthcare services
 - **Audit Trails** - Complete access logging
 - **RBAC** - Role-based access control
 - **Compliance** - HIPAA/NPHIES standards
+- **TLS 1.2/1.3** - Strong encryption standards
+
+### Certificate Authority
+
+BrainSAIT includes a complete CA system for healthcare services:
+
+```bash
+cd security/ca
+./manage-ca.sh
+
+# Create certificates for:
+# - HTTPS servers
+# - Client authentication
+# - NPHIES healthcare services
+```
+
+See [Security Documentation](security/README.md) for details.
 
 ---
 

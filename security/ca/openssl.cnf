@@ -1,0 +1,146 @@
+# BRAINSAIT Certificate Authority Configuration
+# HIPAA & NPHIES Compliant Healthcare CA
+
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+# Directory and file locations
+dir               = /Users/fadil369/Library/Application Support/Certificate Authority/BRAINSAIT-CA
+certs             = $dir/certs
+crl_dir           = $dir/crl
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+RANDFILE          = $dir/private/.rand
+
+# The root key and certificate
+private_key       = $dir/private/brainsait-ca.key.pem
+certificate       = $dir/certs/brainsait-ca.cert.pem
+
+# For certificate revocation lists
+crlnumber         = $dir/crlnumber
+crl               = $dir/crl/brainsait-ca.crl.pem
+crl_extensions    = crl_ext
+default_crl_days  = 30
+
+# SHA-256 for security
+default_md        = sha256
+
+name_opt          = ca_default
+cert_opt          = ca_default
+default_days      = 375
+preserve          = no
+policy            = policy_strict
+
+[ policy_strict ]
+# BRAINSAIT strict policy for internal certificates
+countryName             = match
+stateOrProvinceName     = match
+organizationName        = match
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ policy_loose ]
+# Policy for signing third-party certificates
+countryName             = optional
+stateOrProvinceName     = optional
+localityName            = optional
+organizationName        = optional
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ req ]
+default_bits        = 4096
+distinguished_name  = req_distinguished_name
+string_mask         = utf8only
+default_md          = sha256
+x509_extensions     = v3_ca
+
+[ req_distinguished_name ]
+# BRAINSAIT default values
+countryName                     = Country Name (2 letter code)
+stateOrProvinceName             = State or Province Name
+localityName                    = Locality Name
+0.organizationName              = Organization Name
+organizationalUnitName          = Organizational Unit Name
+commonName                      = Common Name
+emailAddress                    = Email Address
+
+# Defaults
+countryName_default             = SA
+stateOrProvinceName_default     = Riyadh
+localityName_default            = Riyadh
+0.organizationName_default      = BrainSAIT Ltd
+organizationalUnitName_default  = Healthcare Technology Division
+emailAddress_default            = security@brainsait.com
+
+[ v3_ca ]
+# Extensions for root CA certificate
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+
+[ v3_intermediate_ca ]
+# Extensions for intermediate CA certificate
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true, pathlen:0
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+
+[ usr_cert ]
+# Extensions for client certificates
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "BRAINSAIT Healthcare Platform Client Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, emailProtection
+
+[ server_cert ]
+# Extensions for server certificates (HIPAA compliant)
+basicConstraints = CA:FALSE
+nsCertType = server
+nsComment = "BRAINSAIT HIPAA-Compliant Healthcare Server Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer:always
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[ healthcare_cert ]
+# MEDICAL: Extensions for NPHIES healthcare service certificates
+basicConstraints = CA:FALSE
+nsComment = "BRAINSAIT NPHIES Healthcare Service Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, digitalSignature, keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth, clientAuth, codeSigning
+# OID for healthcare services: 1.3.6.1.4.1.61026.3.1
+certificatePolicies = 1.3.6.1.4.1.61026.3.1
+
+[ crl_ext ]
+# Extension for CRLs
+authorityKeyIdentifier=keyid:always
+
+[ ocsp ]
+# Extension for OCSP signing certificates
+basicConstraints = CA:FALSE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, digitalSignature
+extendedKeyUsage = critical, OCSPSigning
+
+[ alt_names ]
+# BRAINSAIT service domains
+DNS.1 = brainsait.com
+DNS.2 = *.brainsait.com
+DNS.3 = brainsait.sa
+DNS.4 = *.brainsait.sa
+DNS.5 = localhost
+IP.1 = 127.0.0.1
+IP.2 = ::1
