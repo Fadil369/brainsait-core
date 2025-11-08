@@ -1,0 +1,48 @@
+{
+  "name": "brainsait-core",
+  "description": "BrainSAIT Healthcare AI Platform - Enterprise healthcare solution for Saudi Arabia & Sudan",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "author": "BrainSAIT Team <support@brainsait.com>",
+  "license": "PROPRIETARY",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Fadil369/brainsait-core.git"
+  },
+  "keywords": [
+    "healthcare",
+    "HIPAA",
+    "NPHIES",
+    "FHIR",
+    "Saudi Arabia",
+    "Sudan",
+    "medical",
+    "EMR",
+    "bilingual"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "generate-docs": "python3 generate_all.py"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "@google/genai": "^1.29.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

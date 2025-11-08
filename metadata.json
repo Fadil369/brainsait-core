@@ -1,0 +1,7 @@
+{
+  "name": "Business in a Box",
+  "description": "A comprehensive business management suite inspired by the provided screenshots, featuring a dashboard, inbox, task manager, drive, templates, and an integrated Gemini AI assistant for real-time voice conversations.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
