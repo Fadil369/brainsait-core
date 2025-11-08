@@ -40,6 +40,14 @@ export enum Page {
   Projects = 'Projects',
   Goals = 'Goals',
   Chart = 'Chart',
+  // BRAINSAIT: Enhanced pages
+  Dashboard = 'Dashboard',
+  Certificates = 'Certificates',
+  Documents = 'Documents',
+  AIAssistant = 'AIAssistant',
+  NPHIES = 'NPHIES',
+  Analytics = 'Analytics',
+  Compliance = 'Compliance',
 }
 
 export enum IconName {
